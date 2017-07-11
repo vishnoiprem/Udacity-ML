@@ -1,0 +1,5 @@
+def solution(K,L,M,N,P,Q,R,S):
+ left, bottom = max(K,P), max(L,Q) 
+ right, top  = max(min(M,R), left), max(min(N,S), bottom)
+ return (M-K)*(N-L) - (right-left)*(top-bottom) + (R-P)*(S-Q) 
+print(solution(-4,1,2,6,0,-1,4,3))
