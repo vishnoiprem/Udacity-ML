@@ -1,0 +1,517 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 44,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.0.2 pyspark-shell'\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 45,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#    Spark\n",
+    "\n",
+    "import findspark\n",
+    "findspark.init('/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7')\n",
+    "\n",
+    "from pyspark import SparkContext\n",
+    "#    Spark Streaming\n",
+    "from pyspark.streaming import StreamingContext\n",
+    "#    Kafka\n",
+    "from pyspark.streaming.kafka import KafkaUtils\n",
+    "#    json parsing\n",
+    "import json"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "sc.stop()\n",
+    "sc = SparkContext(appName=\"PythonSparkStreamingKafka_RM_01\")\n",
+    "sc.setLogLevel(\"WARN\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Create Streaming Context\n",
+    "We pass the Spark context (from above) along with the batch duration (here, 60 seconds).\n",
+    "See the API reference and programming guide for more details."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 47,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "ssc = StreamingContext(sc, 60)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 48,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<pyspark.streaming.context.StreamingContext at 0x107f8cf28>"
+      ]
+     },
+     "execution_count": 48,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "ssc"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Connect to Kafka\n",
+    "Using the native Spark Streaming Kafka capabilities, we use the streaming context from above to connect to our Kafka cluster. The topic connected to is twitter, from consumer group spark-streaming. The latter is an arbitrary name that can be changed as required.\n",
+    "For more information see the documentation."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 49,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "kafkaStream = KafkaUtils.createStream(ssc, 'cdh57-01-node-01.moffatt.me:2181', 'spark-streaming', {'twitter':1})"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 50,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<pyspark.streaming.dstream.TransformedDStream at 0x107f33518>"
+      ]
+     },
+     "execution_count": 50,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "kafkaStream"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Message Processing\n",
+    "Parse the inbound message as json\n",
+    "The inbound stream is a DStream, which supports various built-in transformations such as map which is used here to parse the inbound messages from their native JSON format.\n",
+    "Note that this will fail horribly if the inbound message isn't valid JSON."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "parsed = kafkaStream.map(lambda v: json.loads(v[1]))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<pyspark.streaming.dstream.TransformedDStream at 0x107f33c88>"
+      ]
+     },
+     "execution_count": 52,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "parsed"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Count number of tweets in the batch\n",
+    "The DStream object provides native functions to count the number of messages in the batch, and to print them to the output:\n",
+    "count\n",
+    "pprint\n",
+    "We use the map function to add in some text explaining the value printed.\n",
+    "Note that nothing gets written to output from the Spark Streaming context and descendent objects until the Spark Streaming Context is started, which happens later in the code\n",
+    "pprint by default only prints the first 10 values"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 43,
+   "metadata": {},
+   "outputs": [
+    {
+     "ename": "Py4JJavaError",
+     "evalue": "An error occurred while calling None.org.apache.spark.streaming.api.python.PythonTransformedDStream.\n: java.lang.IllegalStateException: Adding new inputs, transformations, and output operations after stopping a context is not supported\n\tat org.apache.spark.streaming.dstream.DStream.validateAtInit(DStream.scala:228)\n\tat org.apache.spark.streaming.dstream.DStream.<init>(DStream.scala:66)\n\tat org.apache.spark.streaming.api.python.PythonDStream.<init>(PythonDStream.scala:224)\n\tat org.apache.spark.streaming.api.python.PythonTransformedDStream.<init>(PythonDStream.scala:241)\n\tat sun.reflect.NativeConstructorAccessorImpl.newInstance0(Native Method)\n\tat sun.reflect.NativeConstructorAccessorImpl.newInstance(NativeConstructorAccessorImpl.java:62)\n\tat sun.reflect.DelegatingConstructorAccessorImpl.newInstance(DelegatingConstructorAccessorImpl.java:45)\n\tat java.lang.reflect.Constructor.newInstance(Constructor.java:422)\n\tat py4j.reflection.MethodInvoker.invoke(MethodInvoker.java:247)\n\tat py4j.reflection.ReflectionEngine.invoke(ReflectionEngine.java:357)\n\tat py4j.Gateway.invoke(Gateway.java:236)\n\tat py4j.commands.ConstructorCommand.invokeConstructor(ConstructorCommand.java:80)\n\tat py4j.commands.ConstructorCommand.execute(ConstructorCommand.java:69)\n\tat py4j.GatewayConnection.run(GatewayConnection.java:214)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+      "\u001b[0;31mPy4JJavaError\u001b[0m                             Traceback (most recent call last)",
+      "\u001b[0;32m<ipython-input-43-426501df41a1>\u001b[0m in \u001b[0;36m<module>\u001b[0;34m()\u001b[0m\n\u001b[0;32m----> 1\u001b[0;31m \u001b[0mparsed\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mcount\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mmap\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;32mlambda\u001b[0m \u001b[0mx\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m'Tweets in this batch: %s'\u001b[0m \u001b[0;34m%\u001b[0m \u001b[0mx\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mpprint\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m",
+      "\u001b[0;32m/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7/python/pyspark/streaming/dstream.py\u001b[0m in \u001b[0;36mpprint\u001b[0;34m(self, num)\u001b[0m\n\u001b[1;32m    179\u001b[0m             \u001b[0mprint\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m\"\"\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    180\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 181\u001b[0;31m         \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mforeachRDD\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mtakeAndPrint\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    182\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    183\u001b[0m     \u001b[0;32mdef\u001b[0m \u001b[0mmapValues\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mf\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7/python/pyspark/streaming/dstream.py\u001b[0m in \u001b[0;36mforeachRDD\u001b[0;34m(self, func)\u001b[0m\n\u001b[1;32m    160\u001b[0m         \u001b[0mjfunc\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mTransformFunction\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_sc\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mfunc\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jrdd_deserializer\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    161\u001b[0m         \u001b[0mapi\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_ssc\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jvm\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mPythonDStream\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 162\u001b[0;31m         \u001b[0mapi\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mcallForeachRDD\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jdstream\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mjfunc\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    163\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    164\u001b[0m     \u001b[0;32mdef\u001b[0m \u001b[0mpprint\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mnum\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0;36m10\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7/python/pyspark/streaming/dstream.py\u001b[0m in \u001b[0;36m_jdstream\u001b[0;34m(self)\u001b[0m\n\u001b[1;32m    641\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    642\u001b[0m         \u001b[0mjfunc\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mTransformFunction\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_sc\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mfunc\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mprev\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jrdd_deserializer\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 643\u001b[0;31m         \u001b[0mdstream\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_sc\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jvm\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mPythonTransformedDStream\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mprev\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jdstream\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mdstream\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mjfunc\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    644\u001b[0m         \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jdstream_val\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mdstream\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0masJavaDStream\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    645\u001b[0m         \u001b[0;32mreturn\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_jdstream_val\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7/python/lib/py4j-0.10.4-src.zip/py4j/java_gateway.py\u001b[0m in \u001b[0;36m__call__\u001b[0;34m(self, *args)\u001b[0m\n\u001b[1;32m   1399\u001b[0m         \u001b[0manswer\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_gateway_client\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0msend_command\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mcommand\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   1400\u001b[0m         return_value = get_return_value(\n\u001b[0;32m-> 1401\u001b[0;31m             answer, self._gateway_client, None, self._fqn)\n\u001b[0m\u001b[1;32m   1402\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   1403\u001b[0m         \u001b[0;32mfor\u001b[0m \u001b[0mtemp_arg\u001b[0m \u001b[0;32min\u001b[0m \u001b[0mtemp_args\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/Users/vishnoiprem/software/spark-2.2.0-bin-hadoop2.7/python/lib/py4j-0.10.4-src.zip/py4j/protocol.py\u001b[0m in \u001b[0;36mget_return_value\u001b[0;34m(answer, gateway_client, target_id, name)\u001b[0m\n\u001b[1;32m    317\u001b[0m                 raise Py4JJavaError(\n\u001b[1;32m    318\u001b[0m                     \u001b[0;34m\"An error occurred while calling {0}{1}{2}.\\n\"\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 319\u001b[0;31m                     format(target_id, \".\", name), value)\n\u001b[0m\u001b[1;32m    320\u001b[0m             \u001b[0;32melse\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    321\u001b[0m                 raise Py4JError(\n",
+      "\u001b[0;31mPy4JJavaError\u001b[0m: An error occurred while calling None.org.apache.spark.streaming.api.python.PythonTransformedDStream.\n: java.lang.IllegalStateException: Adding new inputs, transformations, and output operations after stopping a context is not supported\n\tat org.apache.spark.streaming.dstream.DStream.validateAtInit(DStream.scala:228)\n\tat org.apache.spark.streaming.dstream.DStream.<init>(DStream.scala:66)\n\tat org.apache.spark.streaming.api.python.PythonDStream.<init>(PythonDStream.scala:224)\n\tat org.apache.spark.streaming.api.python.PythonTransformedDStream.<init>(PythonDStream.scala:241)\n\tat sun.reflect.NativeConstructorAccessorImpl.newInstance0(Native Method)\n\tat sun.reflect.NativeConstructorAccessorImpl.newInstance(NativeConstructorAccessorImpl.java:62)\n\tat sun.reflect.DelegatingConstructorAccessorImpl.newInstance(DelegatingConstructorAccessorImpl.java:45)\n\tat java.lang.reflect.Constructor.newInstance(Constructor.java:422)\n\tat py4j.reflection.MethodInvoker.invoke(MethodInvoker.java:247)\n\tat py4j.reflection.ReflectionEngine.invoke(ReflectionEngine.java:357)\n\tat py4j.Gateway.invoke(Gateway.java:236)\n\tat py4j.commands.ConstructorCommand.invokeConstructor(ConstructorCommand.java:80)\n\tat py4j.commands.ConstructorCommand.execute(ConstructorCommand.java:69)\n\tat py4j.GatewayConnection.run(GatewayConnection.java:214)\n\tat java.lang.Thread.run(Thread.java:745)\n"
+     ]
+    }
+   ],
+   "source": [
+    "parsed.count().map(lambda x:'Tweets in this batch: %s' % x).pprint()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Note that if you jump ahead and try to use Windowing at this point, for example to count the number of tweets in the last hour using the countByWindow function, it'll fail. This is because we've not set up the streaming context with a checkpoint directory yet. You'll get the error: java.lang.IllegalArgumentException: requirement failed: The checkpoint directory has not been set. Please set it by StreamingContext.checkpoint().. See later on in the blog for details about how to do this.\n"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {},
+   "source": [
+    "Extract Author name from each tweet\n",
+    "Tweets come through in a JSON structure, of which you can see an example here. We're going to analyse tweets by author, which is accessible in the json structure at user.screen_name.\n",
+    "The lambda anonymous function is used to apply the map to each RDD within the DStream. The result is a DStream holding just the author's screenname for each tweet in the original DStream."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 53,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "authors_dstream = parsed.map(lambda tweet: tweet['user']['screen_name'])\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 54,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<pyspark.streaming.dstream.TransformedDStream at 0x107f33550>"
+      ]
+     },
+     "execution_count": 54,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "authors_dstream"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 55,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "author_counts = authors_dstream.countByValue()\n",
+    "author_counts.pprint()"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {},
+   "source": [
+    "Sort the author count¶\n",
+    "If you try and use the sortBy function directly against the DStream you get an error:\n",
+    "'TransformedDStream' object has no attribute 'sortBy'\n",
+    "\n",
+    "This is because sort is not a built-in DStream function, we use the transform function to access sortBy from pySpark.\n",
+    "To use sortBy you specify a lambda function to define the sort order. Here we're going to do it based on first the author name (index 0 of the RDD), and then of that order, by number of tweets (index 1 of the RDD). You'll note these index references being used in the sortBy lambda function x[0] and x[1]. Thanks to user6910411 on StackOverflow for a better way of doing this.\n",
+    "Here I'm using \\ as line continuation characters to make the code more legible."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 56,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "author_counts_sorted_dstream = author_counts.transform(\\\n",
+    "  (lambda foo:foo\\\n",
+    "   .sortBy(lambda x:( -x[1]))))\n",
+    "#   .sortBy(lambda x:(x[0].lower(), -x[1]))\\\n",
+    "#  ))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 57,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "author_counts_sorted_dstream.pprint()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 58,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "top_five_authors = author_counts_sorted_dstream.transform\\\n",
+    "  (lambda rdd:sc.parallelize(rdd.take(5)))\n",
+    "top_five_authors.pprint()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Get authors with more than one tweet, or whose username starts with 'a'\n",
+    "Let's get a bit more fancy now - filtering the resulting list of authors to only show the ones who have tweeted more than once in our batch window, or -arbitrarily- whose screenname begins with rm.."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 59,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "filtered_authors = author_counts.filter(lambda x:\\\n",
+    "                                                x[1]>1 \\\n",
+    "                                                or \\\n",
+    "                                                x[0].lower().startswith('rm'))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 60,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<pyspark.streaming.dstream.TransformedDStream at 0x107fc9358>"
+      ]
+     },
+     "execution_count": 60,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "filtered_authors"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 61,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "filtered_authors.transform\\\n",
+    "  (lambda rdd:rdd\\\n",
+    "  .sortBy(lambda x:-x[1]))\\\n",
+    "  .pprint()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 62,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "parsed.\\\n",
+    "    flatMap(lambda tweet:tweet['text'].split(\" \"))\\\n",
+    "    .countByValue()\\\n",
+    "    .transform\\\n",
+    "      (lambda rdd:rdd.sortBy(lambda x:-x[1]))\\\n",
+    "    .pprint()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Start the streaming context\n",
+    "Having defined the streaming context, now we're ready to actually start it! When you run this cell, the program will start, and you'll see the result of all the pprint functions above appear in the output to this cell below. If you're running it outside of Jupyter (via spark-submit) then you'll see the output on stdout.\n",
+    "I've added a timeout to deliberately cancel the execution after three minutes. In practice, you would not set this :)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 63,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:31:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:31:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:31:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:31:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:31:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:32:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:32:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:32:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:32:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:32:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:33:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:33:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:33:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:33:00\n",
+      "-------------------------------------------\n",
+      "\n",
+      "-------------------------------------------\n",
+      "Time: 2017-08-20 18:33:00\n",
+      "-------------------------------------------\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "ssc.start()\n",
+    "ssc.awaitTermination(timeout=180)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 64,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "ssc.stop()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.1"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
